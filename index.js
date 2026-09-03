@@ -76,29 +76,44 @@ function isChannelOrGroupJid(jid) {
     return typeof jid === 'string' && CHANNEL_SUFFIXES.some((suffix) => jid.endsWith(suffix));
 }
 
-function extractChannelInviteCode(value) {
-    const match = String(value || '').match(
-        /(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([^/?#\s]+)/i,
-    );
+function extractInviteCode(value, kind) {
+    const patterns = {
+        channel: /(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([^/?#\s]+)/i,
+        group: /(?:https?:\/\/)?chat\.whatsapp\.com\/([^/?#\s]+)/i,
+    };
+    const match = String(value || '').match(patterns[kind]);
     return match ? match[1] : null;
 }
 
 async function resolveChannelInput(sock, value, label) {
     const input = clean(value);
-    const inviteCode = extractChannelInviteCode(input);
+    const channelInviteCode = extractInviteCode(input, 'channel');
+    const groupInviteCode = extractInviteCode(input, 'group');
 
-    if (!inviteCode) return input;
-    if (typeof sock.newsletterMetadata !== 'function') {
-        throw new Error('إصدار Baileys الحالي لا يدعم تحويل رابط القناة.');
-    }
+    if (!channelInviteCode && !groupInviteCode) return input;
 
     try {
-        const metadata = await sock.newsletterMetadata('invite', inviteCode);
-        const jid = clean(metadata?.id);
-        if (!jid || !jid.endsWith('@newsletter')) {
-            throw new Error('لم يرجع واتساب ID صالحًا للقناة.');
+        if (channelInviteCode) {
+            if (typeof sock.newsletterMetadata !== 'function') {
+                throw new Error('إصدار Baileys الحالي لا يدعم تحويل رابط القناة.');
+            }
+            const metadata = await sock.newsletterMetadata('invite', channelInviteCode);
+            const jid = clean(metadata?.id);
+            if (!jid || !jid.endsWith('@newsletter')) {
+                throw new Error('لم يرجع واتساب ID صالحًا للقناة.');
+            }
+            console.log(`🔗 تم تحويل رابط ${label} إلى ID: ${jid}`);
+            return jid;
         }
 
+        if (typeof sock.groupGetInviteInfo !== 'function') {
+            throw new Error('إصدار Baileys الحالي لا يدعم تحويل رابط الجروب.');
+        }
+        const metadata = await sock.groupGetInviteInfo(groupInviteCode);
+        const jid = clean(metadata?.id);
+        if (!jid || !jid.endsWith('@g.us')) {
+            throw new Error('لم يرجع واتساب ID صالحًا للجروب.');
+        }
         console.log(`🔗 تم تحويل رابط ${label} إلى ID: ${jid}`);
         return jid;
     } catch (error) {
@@ -111,11 +126,11 @@ async function resolveConfiguredChannels(sock) {
 
     channelConfigResolutionInProgress = true;
     try {
-        targetChannel = await resolveChannelInput(sock, TARGET_CHANNEL_INPUT, 'القناة المستهدفة');
+        targetChannel = await resolveChannelInput(sock, TARGET_CHANNEL_INPUT, 'الدردشة المستهدفة');
 
         const resolvedChannels = [];
         for (const input of MONITORED_CHANNEL_INPUTS) {
-            resolvedChannels.push(await resolveChannelInput(sock, input, 'القناة المراقبة'));
+            resolvedChannels.push(await resolveChannelInput(sock, input, 'الدردشة المراقبة'));
         }
         monitoredChannels = new Set(resolvedChannels.filter(Boolean));
         channelConfigResolved = true;
