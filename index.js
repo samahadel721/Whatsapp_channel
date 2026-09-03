@@ -324,6 +324,11 @@ async function startBot() {
         }
     });
 
+    // فتح القناة داخل تطبيق واتساب لا يرسل حدثًا للبوت، لكن مزامنة السجل قد تحتوي على ID القناة.
+    sock.ev.on('messaging-history.set', ({ chats = [] }) => {
+        for (const chat of chats) announceJid(chat.id, 'history');
+    });
+
     // chats.upsert/update غالبًا يكشفان IDs حتى قبل وصول رسالة جديدة.
     sock.ev.on('chats.upsert', (chats) => {
         for (const chat of chats || []) announceJid(chat.id, 'chat');
