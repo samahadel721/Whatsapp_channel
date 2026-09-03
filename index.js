@@ -338,12 +338,32 @@ async function startBot() {
         for (const chat of chats || []) announceJid(chat.id, 'chat');
     });
 
+    sock.ev.on('groups.upsert', (groups) => {
+        for (const group of groups || []) announceJid(group.id, 'group');
+    });
+
+    sock.ev.on('groups.update', (groups) => {
+        for (const group of groups || []) announceJid(group.id, 'group');
+    });
+
+    // عند فتح دردشة قد تصل read receipts أو تحديثات للرسائل بدل حدث اسمه "فتح القناة".
+    sock.ev.on('messages.update', (updates) => {
+        for (const update of updates || []) announceJid(update.key?.remoteJid, 'message update');
+    });
+
+    sock.ev.on('message-receipt.update', (updates) => {
+        for (const update of updates || []) announceJid(update.key?.remoteJid, 'receipt');
+    });
+
     let forwardQueue = Promise.resolve();
     sock.ev.on('messages.upsert', ({ messages = [], type }) => {
-        // notify = رسائل وصلت الآن. append عادةً جزء من السجل القديم، فلا نعيد نشره.
-        if (type !== 'notify') return;
-
         for (const msg of messages) {
+            // نطبع ID حتى لو كانت الرسالة جزءًا من السجل القديم (append)، لكن لا نعيد نشر القديم.
+            announceJid(msg.key?.remoteJid, type === 'notify' ? 'new message' : 'history message');
+
+            // notify = رسائل وصلت الآن. append عادةً جزء من السجل القديم، فلا نعيد نشره.
+            if (type !== 'notify') continue;
+
             forwardQueue = forwardQueue
                 .then(() => handleMessage(sock, msg))
                 .catch((error) => console.error('❌ حصل خطأ أثناء معالجة الرسالة:', error));
