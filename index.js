@@ -9,6 +9,7 @@ const {
     normalizeMessageContent,
 } = require('@whiskeysockets/baileys');
 const qrcode = require('qrcode-terminal');
+const pino = require('pino');
 const fs = require('fs-extra');
 const path = require('path');
 require('dotenv').config();
@@ -65,6 +66,7 @@ let channelConfigResolved = false;
 let channelConfigResolutionInProgress = false;
 const SAVE_DOWNLOADS = asBoolean(process.env.SAVE_DOWNLOADS, true);
 const RECONNECT_DELAY_MS = Number(process.env.RECONNECT_DELAY_MS || 5000);
+const LOG_LEVEL = clean(process.env.LOG_LEVEL) || 'warn';
 
 const CHANNEL_SUFFIXES = ['@newsletter', '@g.us'];
 const announcedJids = new Set();
@@ -269,6 +271,7 @@ async function startBot() {
 
     const sock = makeWASocket({
         auth: state,
+        logger: pino({ level: LOG_LEVEL }),
         // QR fallback. Pairing code is easier when WhatsApp and Termux are on the same tablet.
         printQRInTerminal: false,
         browser: ['Ubuntu', 'Chrome', '120.0.0'],
@@ -305,11 +308,13 @@ async function startBot() {
             closed = true;
             if (pairingTimer) clearTimeout(pairingTimer);
 
-            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            const disconnectError = lastDisconnect?.error;
+            const statusCode = disconnectError?.output?.statusCode;
+            const reason = disconnectError?.message || 'سبب غير معروف';
             const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
             if (shouldReconnect) {
-                console.log(`⚠️ الاتصال اتقفل. إعادة المحاولة بعد ${RECONNECT_DELAY_MS / 1000} ثواني...`);
+                console.log(`⚠️ الاتصال اتقفل (${reason}${statusCode ? `، الكود ${statusCode}` : ''}). إعادة المحاولة بعد ${RECONNECT_DELAY_MS / 1000} ثواني...`);
                 reconnectTimer = setTimeout(() => {
                     startBot().catch((error) => console.error('❌ فشل إعادة الاتصال:', error));
                 }, RECONNECT_DELAY_MS);
