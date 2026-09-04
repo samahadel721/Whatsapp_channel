@@ -132,7 +132,13 @@ async function resolveConfiguredChannels(sock) {
 
         const resolvedChannels = [];
         for (const input of MONITORED_CHANNEL_INPUTS) {
-            resolvedChannels.push(await resolveChannelInput(sock, input, 'الدردشة المراقبة'));
+            try {
+                const resolved = await resolveChannelInput(sock, input, 'الدردشة المراقبة');
+                if (resolved) resolvedChannels.push(resolved);
+            } catch (error) {
+                // رابط واحد منتهي أو غير متاح لا يجب أن يوقف باقي القنوات.
+                console.log(`⚠️ سيتم تجاهل رابط قناة غير متاح: ${error.message || error}`);
+            }
         }
         monitoredChannels = new Set(resolvedChannels.filter(Boolean));
         channelConfigResolved = true;
